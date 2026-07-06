@@ -1,0 +1,101 @@
+# Grant Extraction Process (OECD)
+
+This repository contains a Jupyter notebook that extracts, cleans, and aggregates grant data from the OECD CRS (Common Reporting Standard) dataset. The notebook is designed to be run locally and produces a CSV file containing a curated subset of the data that is ready for downstream analysis.
+
+## Prerequisites
+
+1. **Python 3.11+** – The notebook uses the Polars library, which requires a recent Python version.
+2. **Polars** – Install with `pip install polars`.
+3. **DuckDB** – Optional, used only for exploratory queries. Install with `pip install duckdb`.
+4. **Parquet file** – The raw dataset is expected to be located at:
+	```
+	C:/Users/ayo/Downloads/CRS-parquet (1)/CRS.parquet
+	```
+	If your file is in a different location, update the path in the notebook.
+
+## Notebook Overview
+
+The notebook follows these main steps:
+
+1. **Load the dataset** – The data is read lazily using `polars.scan_parquet()` to avoid loading the entire file into memory.
+2. **Inspect the schema** – Column names are printed to understand the structure.
+3. **Filter for Agriculture** – Rows where `sector_name` contains "Agriculture" are retained.
+4. **Select relevant columns** – A predefined list of columns (`keeplist`) is used to keep only the fields needed for analysis.
+5. **Standard Grants** – Rows with `finance_t == 110` are identified as standard grants.
+6. **Private Development Finance** – From the standard grants, rows with `flow_code == 30` are selected.
+7. **Commitment Filtering** – Rows where `usd_commitment > 0` are kept to focus on actual commitments.
+8. **Export** – The final dataframe is written to `../grants_data/agric_private_dev_df_with_commit.csv`.
+
+## How to Run
+
+1. Open the notebook `agric_dev_extraction_frm_crs.ipynb` located in `notebooks/`.
+2. Execute all cells in order. The notebook will create a `grants_data` folder (relative to the notebook) and write the CSV file.
+3. Verify the output by opening the CSV file or by loading it back into Polars:
+	```python
+	import polars as pl
+	df = pl.read_csv("../grants_data/agric_private_dev_df_with_commit.csv")
+	print(df.head())
+	```
+
+## Customization
+
+* **Changing the source file** – Update the path in the `scan_parquet` call.
+* **Adjusting the filter** – Modify the `filter` conditions (e.g., different `finance_t` or `flow_code`).
+* **Adding columns** – Extend `keeplist` with additional column names.
+
+## Dataset Schema (selected columns)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `year` | int | Reporting year of the grant.
+| `donor_code` | str | ISO code of the donor country.
+| `donor_name` | str | Full name of the donor.
+| `agency_name` | str | Name of the funding agency.
+| `crs_id` | str | Unique CRS identifier.
+| `project_number` | str | Project reference number.
+| `initial_report` | str | Indicator of whether the report is initial.
+| `recipient_code` | str | ISO code of the recipient country.
+| `de_recipientcode` | str | Alternative recipient code.
+| `recipient_name` | str | Full name of the recipient.
+| `region_code` | str | Region code.
+| `de_regioncode` | str | Alternative region code.
+| `region_name` | str | Human‑readable region name.
+| `incomegroup_name` | str | Income group classification.
+| `flow_code` | int | Code for the type of financial flow (e.g., 30 = private development finance).
+| `flow_name` | str | Human‑readable flow name.
+| `bi_multi` | int | Indicator for bilateral/multilateral.
+| `category` | str | Category of the grant.
+| `finance_t` | int | Finance type code (110 = standard grants).
+| `aid_t` | int | Aid type code.
+| `usd_commitment` | float | Commitment amount in USD.
+| `usd_disbursement` | float | Disbursement amount in USD.
+| `usd_commitment_defl` | float | Deflated commitment amount.
+| `usd_disbursement_defl` | float | Deflated disbursement amount.
+| `commitment_date` | date | Date of commitment.
+| `expected_start_date` | date | Expected start date of the project.
+| `completion_date` | date | Project completion date.
+| `long_description` | str | Detailed description of the grant.
+| `keywords` | str | Keywords associated with the grant.
+| `channel_code` | str | Channel code.
+| `channel_name` | str | Channel name.
+| `channel_reported_name` | str | Reported channel name.
+| `parent_channel_code` | str | Parent channel code.
+| `geography` | str | Geographic focus.
+| `ld_cflag` | str | Flag for low‑debt countries.
+| `ld_cflag_name` | str | Name of the low‑debt flag.
+| `sector_name` | str | Name of the sector (e.g., Agriculture).
+| `sector_code` | str | Sector code.
+| `project_title` | str | Title of the project.
+| `purpose_code` | str | Purpose code.
+| `purpose_name` | str | Purpose name.
+| `short_description` | str | Short description of the grant.
+
+The full dataset contains many more columns; the notebook selects only those needed for the analysis.
+
+## License
+
+This project is licensed under the MIT License – see the [LICENSE](../LICENSE) file for details.
+
+---
+
+*Generated by the Grant Extraction Notebook.*
