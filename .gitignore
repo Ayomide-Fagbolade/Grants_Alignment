@@ -1,0 +1,13 @@
+scripts/secrets.py
+scripts/__pycache__/
+
+# Scraped media data — too large for git
+media_data/articles_by_year/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
