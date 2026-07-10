@@ -61,7 +61,7 @@ def get_year_writer(year: str, open_files: dict, writers: dict):
     return open_files[year], writers[year]
 
 
-def build_articles():
+def build_articles(target_years: list = None):
     if not os.path.exists(input_csv):
         print(f"Input file not found: {input_csv}")
         return
@@ -75,12 +75,24 @@ def build_articles():
     with open(input_csv, 'r', encoding='utf-8') as f:
         all_rows = list(csv.DictReader(f))
 
-    rows_to_process = [r for r in all_rows if r['Link'] not in processed_urls]
+    rows_to_process = []
+    for r in all_rows:
+        if r['Link'] not in processed_urls:
+            year = get_year_from_url(r['Link'])
+            if target_years:
+                if year in target_years:
+                    rows_to_process.append(r)
+            else:
+                rows_to_process.append(r)
+
     total = len(rows_to_process)
-    print(f"Articles left to process: {total}")
+    if target_years:
+        print(f"Articles left to process for {', '.join(target_years)}: {total}")
+    else:
+        print(f"Articles left to process: {total}")
 
     if not rows_to_process:
-        print("Everything is processed!")
+        print("Everything is processed for this selection!")
         return
 
     print("Setting up authenticated headless Chrome...")
@@ -155,4 +167,7 @@ def build_articles():
 
 
 if __name__ == "__main__":
-    build_articles()
+    targets = None
+    if len(sys.argv) > 1:
+        targets = sys.argv[1:]
+    build_articles(targets)
