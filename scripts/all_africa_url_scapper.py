@@ -10,6 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from crop_list_and_cat_file import crops_list
+from proxy_helper import rewrite_to_proxy
 
 def check_allafrica():
     results = []
@@ -20,6 +21,7 @@ def check_allafrica():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--ignore-certificate-errors")
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
     
     # Initialize driver
@@ -30,9 +32,10 @@ def check_allafrica():
         for crop in crops_list:
             search_term = urllib.parse.quote_plus(crop) 
             url = f"https://allafrica.com/search/?search_string={search_term}&search_submit=Search"
+            proxied_url = rewrite_to_proxy(url)
             
-            print(f"Searching allafrica.com for '{crop}'...")
-            driver.get(url)
+            print(f"Searching allafrica.com for '{crop}' via proxy: {proxied_url}...")
+            driver.get(proxied_url)
             
             # Wait for the results div to appear (max 15 seconds)
             try:
@@ -63,8 +66,6 @@ def check_allafrica():
                         'Title': title,
                         'Link': href
                     })
-                    
-            time.sleep(2) # polite delay between crops
             
     finally:
         driver.quit()

@@ -1,9 +1,14 @@
 import csv
 import os
 import sys
-from selenium.webdriver.common.by import By
+import requests
+import urllib.parse
+import importlib.util
 from bs4 import BeautifulSoup
-from browser_session import make_driver
+import urllib3
+from proxy_helper import rewrite_to_proxy
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 input_csv = r'c:\Users\ayo\Desktop\Grants_Alignment\media_data\allafrica_results_unique.csv'
 output_dir = r'c:\Users\ayo\Desktop\Grants_Alignment\media_data\articles_by_year'
@@ -95,8 +100,35 @@ def build_articles(target_years: list = None):
         print("Everything is processed for this selection!")
         return
 
-    print("Setting up authenticated headless Chrome...")
-    driver = make_driver()
+    print("Setting up requests Session with proxy cookies...")
+    
+    # Load secrets.py directly to avoid clash with stdlib 'secrets' module
+    _spec = importlib.util.spec_from_file_location(
+        "allafrica_secrets",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets.py")
+    )
+    _mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    ALLAFRICA_PROXY_COOKIES = _mod.ALLAFRICA_PROXY_COOKIES
+    PROXY_HOST = getattr(_mod, "PROXY_HOST", "https://185.16.38.230/")
+
+    def parse_cookies(raw: str) -> dict:
+        cookies = {}
+        for part in raw.split('; '):
+            part = part.strip()
+            if '=' in part:
+                n, _, v = part.partition('=')
+                cookies[n.strip()] = urllib.parse.unquote(v)
+        return cookies
+
+    session = requests.Session()
+    session.cookies.update(parse_cookies(ALLAFRICA_PROXY_COOKIES))
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": f"{PROXY_HOST}/search/advanced.html?__cpo=aHR0cHM6Ly9hbGxhZnJpY2EuY29t",
+    })
 
     open_files: dict = {}
     writers: dict = {}
@@ -104,26 +136,19 @@ def build_articles(target_years: list = None):
     try:
         for count, row in enumerate(rows_to_process, 1):
             url = row['Link']
+            proxied_url = rewrite_to_proxy(url)
             year = get_year_from_url(url) or 'unknown'
-            print(f"[{count}/{total}] [{year}] {url}")
+            print(f"[{count}/{total}] [{year}] {url} -> {proxied_url}")
 
             try:
-                driver.set_page_load_timeout(30)
-                driver.get(url)
+                r = session.get(proxied_url, timeout=15, verify=False)
+                soup = BeautifulSoup(r.text, 'html.parser')
 
-                try:
-                    source_el = driver.find_element(By.CSS_SELECTOR, 'a.source-url')
-                    source_url = source_el.get_attribute('href')
-                except Exception:
-                    source_url = "N/A"
+                source_el = soup.select_one('a.source-url')
+                source_url = source_el.get('href') if source_el else "N/A"
 
-                try:
-                    publisher_el = driver.find_element(By.CSS_SELECTOR, 'a.publisher-url')
-                    publisher_url = publisher_el.get_attribute('href')
-                except Exception:
-                    publisher_url = "N/A"
-
-                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                publisher_el = soup.select_one('a.publisher-url')
+                publisher_url = publisher_el.get('href') if publisher_el else "N/A"
 
                 headline = soup.select_one('h2.headline')
                 headline_text = headline.text.strip() if headline else "N/A"
@@ -137,8 +162,24 @@ def build_articles(target_years: list = None):
                 body_paragraphs = soup.select('.story-body .story-body-text')
                 body_text = "\n".join([p.text.strip() for p in body_paragraphs])
 
-                # Only write if we got meaningful content
+                # Fallback for publisher URL if main tag missing (common in older articles)
+                if publisher_url == "N/A":
+                    pub_a = soup.select_one('.publication a')
+                    if pub_a:
+                        publisher_url = pub_a.get('href') or "N/A"
+
+                # Only write if we got meaningful content (headline and body)
                 if headline_text != 'N/A' and body_text:
+                    # Warn on any N/A fields
+                    if source_url == 'N/A':
+                        print(f"  [N/A] Source_URL missing:    {url}")
+                    if publisher_url == 'N/A':
+                        print(f"  [N/A] Publisher_URL missing: {url}")
+                    if pub_date_text == 'N/A':
+                        print(f"  [N/A] Date missing:          {url}")
+                    if publication_text == 'N/A':
+                        print(f"  [N/A] Publisher missing:     {url}")
+
                     _, writer = get_year_writer(year, open_files, writers)
                     writer.writerow({
                         'Crops': row.get('Crops', 'N/A'),
@@ -153,7 +194,7 @@ def build_articles(target_years: list = None):
                     })
                     open_files[year].flush()
                 else:
-                    print(f"  Skipped (no content): {url}")
+                    print(f"  [SKIP] No content: {url}")
 
             except Exception as e:
                 print(f"  [ERROR] {url} — {e}")
@@ -162,8 +203,8 @@ def build_articles(target_years: list = None):
     finally:
         for f in open_files.values():
             f.close()
-        driver.quit()
-        print("Done. Driver closed.")
+        session.close()
+        print("Done. Session closed.")
 
 
 if __name__ == "__main__":
