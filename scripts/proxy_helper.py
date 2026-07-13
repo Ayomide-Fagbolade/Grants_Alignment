@@ -1,20 +1,23 @@
 import urllib.parse
 import os
 import sys
+import importlib.util
 
-# Insert current dir to path to load secrets.py
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-try:
-    from secrets import PROXY_HOST
-except ImportError:
-    PROXY_HOST = "https://51.38.130.72"
+# Load secrets.py directly by path — avoids clashing with the stdlib 'secrets' module
+_spec = importlib.util.spec_from_file_location(
+    "allafrica_secrets",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets.py")
+)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+PROXY_HOST = getattr(_mod, "PROXY_HOST", "https://185.16.38.230")
 
 TARGET_B64 = "aHR0cHM6Ly9hbGxhZnJpY2EuY29t"  # base64 of https://allafrica.com
 
 def rewrite_to_proxy(url: str) -> str:
     """
     Rewrites https://allafrica.com/path?query to go through the proxy:
-    https://51.38.130.72/path?query&__cpo=aHR0cHM6Ly9hbGxhZnJpY2EuY29t
+    https://185.16.38.230/path?query&__cpo=aHR0cHM6Ly9hbGxhZnJpY2EuY29t
     """
     if PROXY_HOST not in url and "allafrica.com" in url:
         parsed = urllib.parse.urlparse(url)
